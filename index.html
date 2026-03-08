@@ -391,33 +391,49 @@ function setAuthMode(mod, el) {
 // AUTH
 // ═══════════════════════════════════════
 async function authIslem() {
+  const btn = document.getElementById('auth-btn');
   const email = document.getElementById('auth-email').value.trim();
   const sifre = document.getElementById('auth-sifre').value;
+
   if (!email || !sifre) { toast('E-posta ve şifre zorunlu', 'error'); return; }
+  if (sifre.length < 6) { toast('Şifre en az 6 karakter olmalı', 'error'); return; }
 
-  if (authMod === 'kayit') {
-    const ad = document.getElementById('auth-ad').value.trim();
-    const { data, error } = await db.auth.signUp({ email, password: sifre });
-    if (error) { toast(error.message, 'error'); return; }
+  const eskiText = btn.textContent;
+  btn.textContent = '⏳ Bekleyin...';
+  btn.disabled = true;
 
-    // kullanicilar tablosuna ekle
-    await db.from('kullanicilar').insert({ id: data.user.id, email, ad, tip: loginTipi });
+  try {
+    if (authMod === 'kayit') {
+      const ad = document.getElementById('auth-ad').value.trim();
+      if (!ad) { toast('Ad soyad zorunlu', 'error'); btn.disabled=false; btn.textContent=eskiText; return; }
 
-    if (loginTipi === 'kuafor') {
-      const salon = document.getElementById('auth-salon').value.trim();
-      const il = document.getElementById('auth-il').value.trim();
-      const ilce = document.getElementById('auth-ilce').value.trim();
-      await db.from('kuaforler').insert({ kullanici_id: data.user.id, salon_adi: salon, il, ilce });
+      const { data, error } = await db.auth.signUp({ email, password: sifre });
+      if (error) { toast('Hata: ' + error.message, 'error'); btn.disabled=false; btn.textContent=eskiText; return; }
+
+      if (data.user) {
+        await db.from('kullanicilar').insert({ id: data.user.id, email, ad, tip: loginTipi });
+        if (loginTipi === 'kuafor') {
+          const salon = document.getElementById('auth-salon').value.trim() || ad + "'in Salonu";
+          const il = document.getElementById('auth-il').value.trim();
+          const ilce = document.getElementById('auth-ilce').value.trim();
+          await db.from('kuaforler').insert({ kullanici_id: data.user.id, salon_adi: salon, il, ilce });
+        }
+      }
+      toast('✅ Kayıt başarılı! Şimdi giriş yapın.');
+      setAuthMode('giris', null);
+    } else {
+      const { data, error } = await db.auth.signInWithPassword({ email, password: sifre });
+      if (error) { toast('Hata: ' + error.message, 'error'); btn.disabled=false; btn.textContent=eskiText; return; }
+      await kullaniciyiYukle(data.user);
+      toast('✅ Giriş başarılı! Hoş geldiniz 🎉');
+      showTab(aktifKullanici?.tip === 'kuafor' ? 'panel' : 'musteri');
     }
-    toast('Kayıt başarılı! Giriş yapabilirsiniz.');
-    setAuthMode('giris', null);
-  } else {
-    const { data, error } = await db.auth.signInWithPassword({ email, password: sifre });
-    if (error) { toast('Giriş başarısız: ' + error.message, 'error'); return; }
-    await kullaniciyiYukle(data.user);
-    toast('Giriş başarılı! Hoş geldiniz 🎉');
-    showTab(aktifKullanici?.tip === 'kuafor' ? 'panel' : 'musteri');
+  } catch(e) {
+    toast('Bağlantı hatası: ' + e.message, 'error');
+    console.error('Auth hatası:', e);
   }
+  btn.disabled = false;
+  btn.textContent = authMod === 'kayit' ? 'Kayıt Ol' : 'Giriş Yap';
 }
 
 async function kullaniciyiYukle(user) {
